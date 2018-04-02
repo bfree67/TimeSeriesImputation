@@ -46,7 +46,7 @@ from sklearn.preprocessing import MinMaxScaler #, StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import time
 import sys
-from testcode import addtwo
+from datapreprocess import preprocess   ## local library datapreprocess.py
 
 # convert an array of values into a dataset matrix
 def TensorForm(data, look_back):
@@ -69,17 +69,6 @@ def TensorForm(data, look_back):
 # fix random seed for reproducibility
 np.random.seed(7)
 
-xadd = int(input("x = "))
-print (addtwo(xadd))
-
-#### check to see if parameters are ok to continue
-try:
-    contin = input("Continue with model training? (Default = (y)? ")
-except ValueError:
-    contin = "y"
-    
-if contin == "n":
-    sys.exit()
 # 
 # ***
 # 1) load dataset
