@@ -1,0 +1,245 @@
+\documentclass[preprint,12pt,authoryear]{elsarticle}
+\makeatletter
+\def\ps@pprintTitle{%
+ \let\@oddhead\@empty
+ \let\@evenhead\@empty
+ \def\@oddfoot{}%
+ \let\@evenfoot\@oddfoot}
+\makeatother
+
+\usepackage{graphicx}
+%% The amssymb package provides various useful mathematical symbols
+\usepackage{lineno}
+%% The lineno packages adds line numbers. Start line numbering with
+%% \begin{linenumbers}, end it with \end{linenumbers}. Or switch it on
+%% for the whole article with \linenumbers after \end{frontmatter}.
+
+\usepackage{float}
+\usepackage{amsmath}
+%for tables using merged columns
+\usepackage{multirow}
+\usepackage{booktabs}
+
+\usepackage{doi}
+\usepackage{url}
+
+%\journal{Atmospheric Environment}
+
+\title{Imputation of missing time series data using recurrent neural networks}
+
+\begin{document}
+
+\maketitle
+
+\begin{linenumbers}
+\begin{frontmatter}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\author[guelph]{Brian S. Freeman\corref{cor1}}
+%\ead{bfreem02@uoguelph.ca}
+
+\author[guelph]{Bahram Gharabaghi}
+%\ead{bgharaba@uoguelph.ca}
+
+\author[lakes]{Jesse Th\'e }
+%\ead{jesse.the@weblakes.com}
+
+\cortext[cor1]{Corresponding author (bfreem02@uoguelph.ca)}
+
+\address[guelph]{School of Engineering, University of Guelph, Guelph, Ontario, N1G 2W1, Canada}
+\address[lakes]{Lakes Environmental, 170 Columbia St W, Waterloo, Ontario, N2L 3L3 Canada}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{abstract}
+%% Text of abstract
+Missing data from monitored air quality processes can significantly impact descriptive statistics and model outputs by inserting bias. Different imputation techniques exist that allow estimation of data gaps such as carrying the last measurement forward (hot-decking) or substituting the population average for the missing data points. More advanced methods use regression techniques and incorporate multiple variables to provide a best guess for the missing data. For continuous, time series data such as air quality and meteorological parameters, a more effective estimation of these gaps can be provided using deep learning techniques. In this research, we used historical hourly air quality and meteorological data to train a recurrent neural network with long short term memory nodes to learn daily and season patterns within.  Recurrent neural networks incorporate near term time steps by unfolding the inputs over the time sequence and sharing network weights throughout the time sequence. Additionally, the sequence fed to the recurrent neural network has fixed order, ensuring that for the individual observation, the sequence follows the order it appeared in. Using air quality data from monitoring stations over three years, we train a system to reproduce data with randomly generated data gaps with very low error compared to observed values.
+\\ 
+
+\end{abstract}
+
+\begin{keyword}
+Time series \sep Imputation \sep Deep Learning \sep Recurrent neural network \sep  long short term memory 
+\end{keyword}
+
+\end{frontmatter}
+ 
+\section{Introduction}
+Environmental data is a critical component to establishing the policies and decision-making systems that impact human health, industrial output, and ecological risk. Data sets that are corrupted with inaccurate results or missing data can significantly influence summary statistics and their interpretations. 
+
+Continuous environmental time series data is collected by different stations and systems in order to monitor compliance levels and identify hazardous trends \citep{Freeman2017a}.  Many opportunities exist throughout the cycle of data measurement, collection, transfer and storage before it can be reviewed and validated. Missing data points and measurement gaps often occur during power outages, system maintenance, and other operational disruptions. If the system uses a remote data collection service, the receiving server may experience additional gaps due to transmission interruptions and noise. While a remote station may back-up its data locally, this data must be synchronized with the central database in order to correct flaws. Further errors may take place if the measured data must be re-formatted in order to populate central databases. Shifted indices can cause time dependent data to be associated with the wrong time slot. Different reporting units can vary values by orders of magnitudes. A reporting format may cause a value to be represented as integer instead of a floating value that may impact calculations. It may even consider an improper format as "Not a Number" or NaN. In this case, the error is perpetuated if data correction procedures in the software replace the NaN with a zero. Different sources of error are shown in Table \ref{tb-ErrorSources} with the most common error of each category on the top of each list.  
+
+\begin{table}[H]
+\centering
+\caption{Common sources of environmental time series data errors}
+\label{tb-ErrorSources}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{@{}cccc@{}}
+\toprule
+\textbf{Infrastructure} & \textbf{Instrumentation} & \textbf{Communication} & \textbf{Database} \\ \midrule
+Power outages & Calibration & System outage & Unit mismatch \\
+Temperature & Detection Method/Linearty & Noise & Index alignment \\
+Weather/Dust &  &  & Value format \\
+Inlet clogs/contamination &  &  &  \\
+Station placement &  &  &  \\ \bottomrule
+\end{tabular}
+} %end resize
+\end{table}
+
+
+Bad data includes more than just missing data values as shown in Table \ref{tb-BadData}. The most common source of data error is noise introduced during the measurement and digitization process. Evaluation and assessment of this error is outside the scope of this paper. The third error type, out of range error, includes data outliers that are not part of the measurement population (like ambient air temperatures greater than 100 degrees Celsius or Relative Humidity that is 110\%. Other outliers may be unseasonal like 12 degree Celsius weather in Kuwait during August. These values need to be scrubbed along with missing data. Censored data results from the limitations of the measuring instrument and is often represented in a data string as a constant low value or a string value such as '$<$1' if the detection limit was 1 unit, 'ND' for Non-Detect or 'LDL' for lower than detection limit. These non-zero values are often treated as zero in data sets and also impact statistic results. 
+
+\begin{table}[H]
+\centering
+\caption{Types of error in data sets}
+\label{tb-BadData}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Type of Data Error} & \textbf{Description} & \textbf{Identifiers} \\ \midrule
+Missing Data & Gaps of data periods & No value, 0, or NaN \\
+Noisy Data & Data with high variation & Large range centered on a mean or median \\
+Out of Range Data & Data with high variation & Fails outlier tests \\
+Censored Data & Data beyond the range of the measuring device & A constant value or string character \\ \bottomrule
+\end{tabular}
+} %end resize
+\end{table}
+
+\subsection{Handling Bad Data}
+
+Little and Rubin (2002) group different missing data handling strategies into four categories: Procedures Based on Completely Recorded Units, Weighting Procedures, Imputation-Based Procedures, and Model-Based Procedures \citep{Little2002}. Censored data is often replaced with the lowest value in the sample range or the detection limit of the measuring instrument.
+Outliers, if detected, can be excluded by truncating or removing from the data set, or winsorizing the data by replacing it with the nearest non-outlying data point \citep{Hastings1947}. Missing data can use different imputation techniques. These include hot-decking (carrying forward the last observation), cold-decking (using a similar observation from a different sequence of the same sample), and regression models to estimate the missing value \citep{Horton2007}.
+
+
+
+\section{Theoretical Background}
+Imputation of data assumes that there is linear correlation between the data sets. This can be assumed by grouping similar parameters together as subdata groups such as all temperature or wind speed measurements. In areas of homogeneous topography and similar land use, weather patterns do not vary significantly, although the extent may have to be determined by inspection. Some parameters, such as wind direction and analyte concentrations may vary locally and not have correlation. This may be especially true in areas impacted by Land-Sea Breezes \citep{Freeman2017}. In cases of no correlation, imputation methods may show significant bias depending on the method used.
+
+This method also assumes that the time series data comes from a natural and continuous parameter. A continuous parameter will change over time but will not have rapid, step changes as $\Delta t \rightarrow 0$. For measurements of a time period,  $\Delta t$, this continuity is summarized as the average of all measurements within the recording period. The averaged value, $x(t)$, is still influenced by its predecessor, $x(t-1)$, as represented below:
+
+\begin{equation}
+\label{eq:time1}
+x(t) = x(t-1) + \frac{\Delta x}{\Delta t}
+\end{equation}
+
+Environmental time series data often include diurnal cycles that effects photo-chemical reactions, and seasonal effects on temperatures and humidity. Meteorological conditions influence photo-chemical reaction rates for secondary pollutants such as NO$_{2}$ and O$_{3}$ as well as dispersion and mixing from emission sources.
+
+\subsection{Time series data}
+Air quality data are continuous, multi-variate time series where each reading constitutes a set measurement of time and the current reading is in some way related to the previous reading, and therefore dependent \citep{Gheyas2011}. Measured pollutants may be related through photochemical or pre-cursor dependencies, while meteorological conditions are limited by physical properties. 
+
+Time series are often impacted by collinearity and non-stationarity that also violate independence assumptions and can make forecast modeling difficult \citep{Gheyas2011}. Autocorrelation of individual pollutants show different degrees of dependence to past values.  Correlation coefficients were calculated using the equation
+%
+\begin{equation}
+\label{eq:corr}
+Y(\tau)= corr(X(t),X(t - \tau))
+\end{equation}
+%
+\noindent
+where X is the input vector of a time step and $\tau$ is the lag (in hours). The correlogram was plotted based on lags up to 72 hours, as shown in Figure \ref{fig:serialcorr}.
+%
+\begin{figure}[H]
+\centering
+\includegraphics[width=.75\textwidth]{images/time-o3.png}  %assumes jpg extension
+\caption{Correlogram of O$_{3}$ and NOx for 72 hours.}
+\label{fig:serialcorr}
+\end{figure}
+%
+The parameters of Fig \ref{fig:serialcorr} show clear diurnal cycles, with O$_{3}$ having very strong relational dependence every 24 hours, regardless of the time delay. In contrast, the dependency of NOx falls rapidly over time, despite peaking every 24 hours. 
+
+Non-stationarity, collinearity, correlations, and other linear dependencies within data are easily handled by ANNs if enough training data and hidden nodes are provided \citep{Goodfellow2016}. More important to time series are the near term history associated with the previous time step. Recurrent neural networks (RNNs) incorporate near term time steps by unfolding the inputs over the time sequence and sharing network weights throughout the time sequence. Additionally, the sequence fed to the RNN has fixed order, ensuring that for that individual observation, the sequence follows the order it appeared in, rather than randomly sampled as is the case for feed forward network training \citep{Elangasinghe2014}.
+
+\subsection{Recurrent Neural Networks}
+Recurrent neural networks (RNNs) are well suited for multivariate time series data, with the ability to capture temporal dependencies over variable terms \citep{Che2016}. RNNs have been used in many time series applications including speech recognition \citep{Graves2013}, electricity load forecasting \citep{Walid2017} and air pollution \citep{Gomez2003}. RNNs use the same basic building blocks as FFNNs with the addition of the output fed back into the input. This time delay feedback provides a memory feature when sequential data is fed to the RNN. The RNN share the layer's weights as the input cycles through. In Fig \ref{fig:rnn}, $X$ is the input values, $Y$ is the network output, and $H$ is the hidden layers. A feed forward network is provided to compare the data flow over time. By maintaining sequential integrity, the RNN can identify long-term dependencies associated with the data, even if removed by several time steps. An RNN with one time step, or delay, is called an Elman Network (EN) and has been used successfully to predict air quality in previous studies \citep{Biancofiore2015, Biancofiore2017}. 
+
+%
+\begin{figure}[H]
+\centering
+\includegraphics[width=.75\textwidth]{images/rnn.png}  %assumes jpg extension
+\caption{Architecture of an RNN showing layers unfolding in time n times.}
+\label{fig:rnn}
+\end{figure}
+%
+
+RNNs are trained using a modified version of the back propagation algorithm called back propagation through time (BPTT). While allowing the RNN to be trained over many different combinations of time, BPTT is vulnerable to vanishing gradients due to a large number of derivative passes, making an update very small and nearly impossible to learn correlations between remote events \citep{Pascanu2013, Graves2013a}. Different approaches were tried to resolve these training challenges including the use of gated blocks to control network weight updates such as long short term memory (LSTM). LSTMs will be discussed in another section. While RNNs and LSTMs have been around for many years \cite{Hochreiter1997}, their use was limited until recently, in what Goodfellow et al. calls a ``third wave of neural network research". This period began in 2006 and continues to this day \citep{Goodfellow2016}.
+
+Like FFNN's, RNN's are trained on loss functions using optimizers to minimize the error. A brief discussion of these two parameters is provided below.
+
+\subsection{Long Short Term Memory}
+
+In order to preserve the memory of the data in the current state of the model, the RNN feeds parameters of its current state to the next state. This transfer can continue on for multiple time steps and presented significant training challenges as mentioned earlier. The issue of vanishing gradients that took place during the BPTT updates was largely solved with the implementation of gating systems such as long short term memory (LSTM) that allow nodes to forget or pass memory if it is not being used, thus preserving enough error to allow updates \citep{Hochreiter1997}. The LSTM uses a series of gates and feedback loops that are themselves trained on the input data as shown in Fig \ref{fig:lstm}. Each individual node sums the inputs and applies an activation function at the output. The choice of activation function is another parameter to consider in the LSTM design. The difference to the node input is that in addition to the observation data $X$, additional input from the recurrent output, $Y_{R}$, representing a time delayed element of the network, is included for a composite input of 
+%
+\begin{equation}
+\label{eq:Xr}
+X_{R}(t) = X(t) + Y_{R}(t-1)
+\end{equation}
+%
+The processed recurrent input, $X_{R}$ feeds into several gates that allow the data to pass, represented by $\Phi$ in the circles. The weights that pass $X_{R}$ to the gate summations are trained as well.
+%
+\begin{figure}[H]
+\centering
+\includegraphics[width=.75\textwidth]{images/lstm.png} 
+\caption{LSTM architecture showing unit time delays (-1), gates and recurrent activation functions ($\sigma$).}
+\label{fig:lstm}
+\end{figure}
+%
+The use of LSTM in RNN architecture allows long term dependencies in data to be remembered within the model \citep{Graves2013a}, a feature that can be exploited to predict the next value of the sequence. If the predicted value is equal to or within a reasonable range of the observed value, the observed value can be assumed to be valid. The observed value is missing or fails an outlier test, the predicted value replaces the missing value and becomes part of the input to the next sequence test.
+
+\section{Methodology}
+\subsection{Data used}
+ 
+Air quality data was collected from an air monitoring station located in a concentrated mixed commercial/residential area  north of the Kuwait International  Airport. The station used OPSIS differential optical absorption spectroscopy (DOAS) analysers (www.opsis.se)  and collected data from 1 April 2011 to 31 December 2014. Parameters collected included year, month, hour, wind direction (WD), wind speed (WS), temperature (TEMP), relative humidity (RH), sulfur dioxide (SO$_{2}$), nitrogen dioxide (NO$_{2}$, and ozone (O$_{3}$ in one hour observation periods.   
+
+\subsection{Building the RNN}
+The RNN used in this study was prepared in Python 2.7 using the Keras machine learning application programming interface (API) \citep{keras2015} with Theano back-end. Theano is a Python library that allows mathematical expressions to be calculated symbolically and evaluated using datasets in matrices and arrays \citep{Al-Rfou2016}. The architecture used a single RNN layer with LSTM and a single output feed forward node. The output activation functions for both layers was the $sigmoid$ function while the activation function for the recurrent nodes was the $tanh$ function. The final output required a 0 to 1 output in order to be rescaled using the \emph{MinMaxScaler} inversion.
+
+The training algorithm used a Nadam optimizer and MSE loss function \citep{Freeman2018a}. The learning rate, $\alpha$, was left at the default value of 0.002. Other Keras defaults also included weight initialization (using a uniform distribution randomizer). Regulation was not used, although a dropout layer was included between the LSTM and the output layer. 
+
+\subsection{Pre-processing data}
+The training data in each training feature was initially pre-processed to identify possible errors (censored, missing or outlying) using the process shown in Figure \ref{fig:presteps}.  Two zero-padded columns were added to the input data sets to represent missing and outlying data of the target feature. Data recorded as a 0 or a non-detect (ND) was assumed to be censored and converted to the smallest recorded value within the data set of the individual parameter \citep{Rana2015, Helsel2011}.  If a data was missing or recorded as NaN, the corresponding missing data column would be marked as a 1. A value was assumed to be an outlier if it was 3 times greater than the sample mean of the feature. Adding these columns provided additional metadata for the network to train on.
+
+%
+\begin{figure}[H]
+\centering
+\includegraphics[width=.75\textwidth]{images/presteps.png} 
+\caption{Pre-processing steps to identify possible data errors.}
+\label{fig:presteps}
+\end{figure}
+%
+
+\subsection{Input Data preparation}
+Wind direction (WD) and time of day were converted into sine and cosine components in order to preserve their cyclic characteristics \citep{Freeman2018a, Arhami2013}. Other parameters were transformed and scaled between values of 0 and 1 \citep{Chatterjee2017} using the \textbf{MinMaxScaler} function in the Python Sci-Kit pre-processor library \citep{scikit2011}. 
+
+\subsection{Output data preparation}
+The RNN output was trained to predict 1 hour ahead of the input values. To predict this future value, the calculated values were shifted in time based on the desired horizon so that input observations $X(t=0)$ was trained on $Y(t=1)$.  The first hour of both the input and output training data sets were discarded. 
+
+\subsection{Tensor Preparation for RNN input data}
+Data sets provided to the LSTM RNN were converted into 3 dimensional tensors based on the sample size of data. The sample size was based on the number of look-back elements within the RNN, as compared to an observation which represented one row of the original data set, $X$.  The transformation of the original 2 dimensional data set $X$ is illustrated in Fig \ref{fig:tensor-tables} using Python notations. Assuming $X$ is a data set of input data (for training or testing the RNN) with $n$ observations and $p$ variables, the total number of elements is the product of $n * p$, or 20 elements for the 5 x 4 data set in the figure. A tensor ($T$) is created with dimension ($s, l, p$) where s = \# of samples given as $n - l$. The total number of elements within $T$ is $s*l*p$. In the example of Fig \ref{fig:tensor-tables}, the dimensions of $T$ are $s = 5 - 2 = 3$, $l = 2$, and $p = 4$.    
+%
+\begin{figure}[H]
+\centering
+\includegraphics[width=.75\textwidth]{images/tensor-tables.png}  %assumes jpg extension
+\caption{Process of converting data input columns into a Tensor for training the RNN.}
+\label{fig:tensor-tables}
+\end{figure}
+%
+
+
+
+
+\section{Results}
+\subsection{Final parameter selection}
+The model was trained on 80\% of the processed data and tested against 20\% of the total available data. Because of the Tensor formation for input, the actual number of samples provided for training and testing was based on the look ahead horizon and number of recurrent (look-back) units of the individual run. The farther out the prediction, the fewer samples available because of the time shifting required. The total amount samples could be calculated as total samples = $(16,035 - h)$ where $h$ is the prediction horizon (as an integer value $>$ 1). 
+
+\section{Conclusions and recommendations}
+
+
+\section{Acknowledgments}
+Data collection was completed under the United Nations Development Program's Kuwait Integrated Environmental Management System project from 2010 to 2015.  We also acknowledge partial financial support of Natural Science and Engineering Research Council of Canada (NSERC) and Lakes Environmental.
+ 
+\section{References}
+
+\end{linenumbers}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% end 
+\bibliography{imputation}{}
+\bibliographystyle{abbrvnat}
+\end{document}
