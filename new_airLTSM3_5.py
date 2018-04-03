@@ -81,6 +81,10 @@ dft = df[['O3','SO2','NO2', 'WS','TEMP','ATP', 'SR']]
 last_col = np.shape(dft)[1] - 1
 
 np_dft, a_dft = badzeros(dft)
+print("\n")
+
+print(a_dft)
+rows_in,cols_in = np.shape(np_dft)
 
 print("\n")
 a = list(dft)  #makes a list of the column names in the dataframe
@@ -161,6 +165,7 @@ n_batch = 72
 print('\nInput summary')
 print('Loading data from ' + data_file_name)
 print('Training on ' + a[target_col])
+print('Number of input features is ' + str(cols_in))
 print('Prediction horizon is ' + str(lead_time))
 print('Number of training epochs is ' + str(n_epochs))
 print('Number of recurrent units is ' + str(look_back))
