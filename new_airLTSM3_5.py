@@ -46,7 +46,7 @@ from sklearn.preprocessing import MinMaxScaler #, StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import time
 import sys
-from datapreprocess import preprocess   ## local library datapreprocess.py
+from datapreprocess import badzeros   ## local library datapreprocess.py
 
 # convert an array of values into a dataset matrix
 def TensorForm(data, look_back):
@@ -68,7 +68,6 @@ def TensorForm(data, look_back):
 
 # fix random seed for reproducibility
 np.random.seed(7)
-
 # 
 # ***
 # 1) load dataset
@@ -76,13 +75,17 @@ np.random.seed(7)
 data_file_name = 'air_dataset.csv'
 df = read_csv(data_file_name, engine='python', skipfooter=3)
 
-a = list(df)  #makes a list of the column names in the dataframe
+dft = df[['O3','SO2','NO2', 'WS','TEMP','ATP', 'SR']]
 
+
+last_col = np.shape(dft)[1] - 1
+
+np_dft, a_dft = badzeros(dft)
+
+print("\n")
+a = list(dft)  #makes a list of the column names in the dataframe
 for i in range (len(a)):    #prints a list of the column names
     print (i, a[i])
-
-last_col = np.shape(df)[1] - 1
-
 # pick column to predict
 try:
     target_col = int(input("Select the column number to predict (default = " + a[last_col] + "): "))
@@ -91,13 +94,14 @@ except ValueError:
 
 # choose look-ahead to predict   
 try:
-    lead_time =  int(input("How many hours ahead to predict (default = 24)? "))
+    lead_time =  int(input("How many hours ahead to predict (default = 1)? "))
 except ValueError:
-    lead_time = 24
+    lead_time = 1
     
 #convert to floating numpy arrays
-dataset1 = df.fillna(0).values
-dataset1 = dataset1.astype('float32')
+#dataset1 = df.fillna(0).values
+dataset1 = np_dft.astype('float32')
+#dataset1 = dataset1.astype('float32')
 dataplot1 = dataset1[lead_time:,target_col]  #shift training data
 dataplot1 = dataplot1.reshape(-1,1)
 
